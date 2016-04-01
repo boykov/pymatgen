@@ -167,10 +167,6 @@ class IStructureTest(PymatgenTest):
         self.assertEqual(s[0].specie.spin, 3)
         self.assertEqual(type(s), IStructure)
 
-    def test_fast_copy(self):
-        s2 = self.struct.fast_copy()
-        self.assertEqual(self.struct, s2)
-
     def test_site_properties(self):
         site_props = self.propertied_structure.site_properties
         self.assertEqual(site_props['magmom'], [5, -5])
@@ -642,22 +638,6 @@ class StructureTest(PymatgenTest):
         d = self.structure.as_dict()
         s2 = Structure.from_dict(d)
         self.assertEqual(type(s2), Structure)
-
-    def test_propertied_structure_mod(self):
-        prop_structure = Structure(
-            self.structure.lattice, ["Si"] * 2, self.structure.frac_coords,
-            site_properties={'magmom': [5, -5]})
-        prop_structure.append("C", [0.25, 0.25, 0.25])
-        d = prop_structure.as_dict()
-        with warnings.catch_warnings(record=True) as w:
-            # Cause all warnings to always be triggered.
-            warnings.simplefilter("always")
-            s2 = Structure.from_dict(d)
-            self.assertEqual(len(w), 1)
-            self.assertEqual(
-                str(w[0].message),
-                'Not all sites have property magmom. Missing values are set '
-                'to None.')
 
     def test_to_from_file_string(self):
         for fmt in ["cif", "json", "poscar", "cssr", "yaml", "xsf"]:
