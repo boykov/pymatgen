@@ -107,6 +107,12 @@ setup(
         "Topic :: Scientific/Engineering :: Chemistry",
         "Topic :: Software Development :: Libraries :: Python Modules"
     ],
-    ext_modules=[get_spglib_ext()],
+    ext_modules=[get_spglib_ext(),
+                 Extension("pymatgen.optimization.linear_assignment",
+                           ["pymatgen/optimization/linear_assignment.c"],
+                           include_dirs=get_numpy_include_dirs()),
+                 Extension("pymatgen.util.coord_utils_cython",
+                           ["pymatgen/util/coord_utils_cython.c"],
+                           include_dirs=get_numpy_include_dirs())],
     scripts=glob.glob(os.path.join(SETUP_PTH, "scripts", "*"))
 )
