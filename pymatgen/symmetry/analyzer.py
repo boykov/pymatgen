@@ -44,7 +44,6 @@ from pymatgen.core.structure import PeriodicSite
 from pymatgen.core.operations import SymmOp
 from pymatgen.util.coord_utils import find_in_coord_list
 
-
 import spglib
 
 logger = logging.getLogger(__name__)
