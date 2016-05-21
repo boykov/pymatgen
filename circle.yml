@@ -13,14 +13,14 @@ dependencies:
     - pip install -r requirements.txt:
         timeout: 1200
     - pip install -r requirements-optional.txt
-    - sudo apt-get install python-openbabel
+    - sudo apt-get install python-openbabel vtk python-vtk
     - python setup.py develop
 test:
   override:
     - find . -name "*.pyc" -exec rm '{}' \;
     #- python run_circle.py:
     #    timeout: 720
-    - nosetests --with-coverage --cover-package=pymatgen --cover-html --cover-html-dir=$CIRCLE_ARTIFACTS:
+    - nosetests --config=nose.cfg --all-modules --cover-html --cover-html-dir=$CIRCLE_ARTIFACTS:
         timeout: 720
     # Some rudimentary command line tests for pmg
     - pmg convert test_files/Li2O.cif POSCAR.pmg
