@@ -1,6 +1,4 @@
 machine:
-  pre:
-    - rm .python-version
   timezone:
     America/Los_Angeles
   python:
