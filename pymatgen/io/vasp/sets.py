@@ -21,7 +21,7 @@ from monty.serialization import loadfn
 from monty.dev import deprecated
 
 from pymatgen.io.vasp.inputs import Incar, Poscar, Potcar, Kpoints
-from pymatgen.io.vasp.outputs import Vasprun, Outcar, Chgcar
+from pymatgen.io.vasp.outputs import Vasprun, Outcar
 from monty.json import MSONable, MontyDecoder
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.symmetry.bandstructure import HighSymmKpath
