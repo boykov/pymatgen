@@ -52,11 +52,8 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
     """
-    Base class representing a set of DERIVED Vasp input parameters,
-    which means that a previous run, including a structure is supplied as
-    init parameters. The different with AbstractVaspInputSet is that these
-    are simpler because a structure is not supplied to each of the abstract
-    methods but is instead already provided. See examples below.
+    Base class representing a set of Vasp input parameters with a structure
+    supplied as init parameters.
     """
 
     @abc.abstractproperty
@@ -76,6 +73,10 @@ class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
 
     @property
     def potcar_symbols(self):
+        """
+        Returns:
+            List of POTCAR symbols.
+        """
         elements = self.poscar.site_symbols
         potcar_symbols = []
 
@@ -92,6 +93,11 @@ class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
 
     @property
     def potcar(self):
+        """
+
+        Returns:
+            Potcar object.
+        """
         if self.potcar_functional:
             p = Potcar(self.potcar_symbols, functional=self.potcar_functional)
         else:
@@ -172,6 +178,7 @@ class DictSet(VaspInputSet):
        there are no settings, VASP's default of 0.6 is used.
 
     Args:
+        structure (Structure): The Structure to create inputs for.
         name (str): A name fo the input set.
         config_dict (dict): The config dictionary to use.
         hubbard_off (bool): Whether to turn off Hubbard U if it is specified in
@@ -590,6 +597,92 @@ class MPStaticSet(VaspInputSet):
             structure=prev_structure, prev_incar=prev_incar,
             prev_kpoints=prev_kpoints,
             reciprocal_density=reciprocal_density, **kwargs)
+
+
+class MPHSEBSSet(VaspInputSet):
+
+    def __init__(self, structure, prev_chgcar_path=None, **kwargs):
+        """
+        Init a MPHSEBSSet. Note that HSE is SCF calcs only. This input set
+        does a static HSE calculation at either a uniform mesh or
+        uniform+line mesh, with added kpoints.
+
+        Args:
+            structure (Structure): Structure from previous run.
+            prev_chgcar_path (str): Path to CHGCAR from previous run.
+            \*\*kwargs: kwargs supported by MPHSEBSVaspInputSet.
+        """
+        self.structure = structure
+        self.prev_chgcar_path = prev_chgcar_path
+        self.parent_vis = MPHSEBSVaspInputSet(**kwargs)
+
+    @property
+    def incar(self):
+        return self.parent_vis.get_incar(self.structure)
+
+    @property
+    def kpoints(self):
+        return self.parent_vis.get_kpoints(self.structure)
+
+    @property
+    def poscar(self):
+        return self.parent_vis.get_poscar(self.structure)
+
+    @property
+    def potcar(self):
+        return self.parent_vis.get_potcar(self.structure)
+
+    def write_input(self, output_dir,
+                    make_dir_if_not_present=True, include_cif=False):
+        super(MPHSEBSSet, self).write_input(output_dir,
+            make_dir_if_not_present=make_dir_if_not_present,
+            include_cif=include_cif)
+        if self.prev_chgcar_path:
+            shutil.copy(self.prev_chgcar_path,
+                        os.path.join(output_dir, "CHGCAR"))
+
+    @classmethod
+    def from_prev_calc(cls, prev_calc_dir, mode="Uniform",
+                       reciprocal_density=50, copy_chgcar=True, **kwargs):
+        """
+        Generate a set of Vasp input files for static calculations from a
+        directory of previous Vasp run.
+
+        Args:
+            prev_calc_dir (str): Directory containing the outputs
+                (vasprun.xml and OUTCAR) of previous vasp run.
+            mode (str): Either "Uniform" or "Line"
+            reciprocal_density (int): density of k-mesh
+            \*\*kwargs: All kwargs supported by MPHSEBSStaticSet,
+                other than prev_structure which is determined from the previous
+                calc dir.
+        """
+
+        vasprun, outcar = get_vasprun_outcar(prev_calc_dir)
+
+        # note: don't standardize the cell because we want to retain k-points
+        prev_structure = get_structure_from_prev_run(vasprun, outcar,
+                                                     sym_prec=0)
+
+        added_kpoints = []
+        bs = vasprun.get_band_structure()
+        vbm, cbm = bs.get_vbm()["kpoint"], bs.get_cbm()["kpoint"]
+        if vbm:
+            added_kpoints.append(vbm.frac_coords)
+        if cbm:
+            added_kpoints.append(cbm.frac_coords)
+
+        chgcar_path = None
+        if copy_chgcar:
+            chgcars = glob(os.path.join(prev_calc_dir, "CHGCAR*"))
+            if chgcars:
+                chgcar_path = sorted(chgcars)[-1]
+
+        return MPHSEBSSet(
+            structure=prev_structure,
+            added_kpoints=added_kpoints, reciprocal_density=reciprocal_density,
+            mode=mode, prev_chgcar_path=chgcar_path, **kwargs)
+
 
 
 class MPNonSCFSet(VaspInputSet):
@@ -1053,7 +1146,7 @@ class MVLSlabSet(DictVaspInputSet):
         return data
 
 
-def get_vasprun_outcar(path):
+def get_vasprun_outcar(path, parse_dos=True, parse_eigen=True):
     vruns = glob(os.path.join(path, "vasprun.xml*"))
     outcars = glob(os.path.join(path, "OUTCAR*"))
 
@@ -1065,8 +1158,8 @@ def get_vasprun_outcar(path):
     outcarfile_fullpath = os.path.join(path, "OUTCAR")
     vsfile = vsfile_fullpath if vsfile_fullpath in vruns else sorted(vruns)[-1]
     outcarfile = outcarfile_fullpath if outcarfile_fullpath in outcars else sorted(outcars)[-1]
-    return Vasprun(vsfile, parse_dos=False, parse_eigen=None), Outcar(
-        outcarfile)
+    return Vasprun(vsfile, parse_dos=parse_dos, parse_eigen=parse_eigen), \
+           Outcar(outcarfile)
 
 
 def get_structure_from_prev_run(vasprun, outcar=None, sym_prec=0.1,
