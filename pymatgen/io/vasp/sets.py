@@ -73,29 +73,26 @@ class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
     @property
     def potcar_symbols(self):
         """
-        Returns:
-            List of POTCAR symbols.
+        List of POTCAR symbols.
         """
         elements = self.poscar.site_symbols
         potcar_symbols = []
+        settings = self.config_dict["POTCAR"]
 
-        if isinstance(self.potcar_settings[elements[-1]], dict):
+        if isinstance(settings[elements[-1]], dict):
             for el in elements:
-                potcar_symbols.append(self.potcar_settings[el]['symbol']
-                                      if el in self.potcar_settings else el)
+                potcar_symbols.append(settings[el]['symbol']
+                                      if el in settings else el)
         else:
             for el in elements:
-                potcar_symbols.append(self.potcar_settings[el]
-                                      if el in self.potcar_settings else el)
+                potcar_symbols.append(settings.get(el, el))
 
         return potcar_symbols
 
     @property
     def potcar(self):
         """
-
-        Returns:
-            Potcar object.
+        Potcar object.
         """
         if self.potcar_functional:
             p = Potcar(self.potcar_symbols, functional=self.potcar_functional)
@@ -109,7 +106,7 @@ class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
         Returns all input files as a dict of {filename: vasp object}
 
         Returns:
-            dict of {filename: file_as_string}, e.g., {'INCAR':'EDIFF=1e-4...'}
+            dict of {filename: object}, e.g., {'INCAR': Incar object, ...}
         """
         kpoints = self.kpoints
         incar = self.incar
@@ -140,8 +137,8 @@ class VaspInputSet(six.with_metaclass(abc.ABCMeta, MSONable)):
             v.write_file(os.path.join(output_dir, k))
             if k == "POSCAR" and include_cif:
                 v.structure.to(
-                    filename=os.path.join(output_dir,
-                                          "%s.cif" % v.structure.formula))
+                    filename=os.path.join(
+                        output_dir, "%s.cif" % v.structure.formula))
 
     def as_dict(self, verbosity=2):
         d = MSONable.as_dict(self)
@@ -177,8 +174,6 @@ class DictSet(VaspInputSet):
        is used, e.g., Mn3+ may have a different magmom than Mn4+.
     4. Lastly, the element symbol itself is checked in the config file. If
        there are no settings, VASP's default of 0.6 is used.
-
-    .
 
     Args:
         structure (Structure): The Structure to create inputs for.
@@ -227,19 +222,17 @@ class DictSet(VaspInputSet):
         self.config_dict = config_dict
         self.name = name
         self.files_to_transfer = files_to_transfer or {}
-        self.potcar_settings = config_dict["POTCAR"]
-        self.kpoints_settings = config_dict['KPOINTS']
-        self.incar_settings = config_dict['INCAR']
         self.set_nupdown = constrain_total_magmom
         self.sort_structure = sort_structure
         self.potcar_functional = potcar_functional
         self.force_gamma = force_gamma
         self.reduce_structure = reduce_structure
-        if user_incar_settings:
-            self.incar_settings.update(user_incar_settings)
+        self.user_incar_settings = user_incar_settings or {}
 
     @property
     def incar(self):
+        settings = dict(self.config_dict["INCAR"])
+        settings.update(self.user_incar_settings)
         structure = self.structure
         incar = Incar()
         comp = structure.composition
@@ -247,45 +240,45 @@ class DictSet(VaspInputSet):
                           key=lambda e: e.X)
         most_electroneg = elements[-1].symbol
         poscar = Poscar(structure)
-        hubbard_u = self.incar_settings.get("LDAU", False)
-        for key, setting in self.incar_settings.items():
-            if key == "MAGMOM":
+        hubbard_u = settings.get("LDAU", False)
+        for k, v in settings.items():
+            if k == "MAGMOM":
                 mag = []
                 for site in structure:
                     if hasattr(site, 'magmom'):
                         mag.append(site.magmom)
                     elif hasattr(site.specie, 'spin'):
                         mag.append(site.specie.spin)
-                    elif str(site.specie) in setting:
-                        mag.append(setting.get(str(site.specie)))
+                    elif str(site.specie) in v:
+                        mag.append(v.get(str(site.specie)))
                     else:
-                        mag.append(setting.get(site.specie.symbol, 0.6))
-                incar[key] = mag
-            elif key in ('LDAUU', 'LDAUJ', 'LDAUL'):
+                        mag.append(v.get(site.specie.symbol, 0.6))
+                incar[k] = mag
+            elif k in ('LDAUU', 'LDAUJ', 'LDAUL'):
                 if hubbard_u:
-                    if hasattr(structure[0], key.lower()):
-                        m = dict([(site.specie.symbol, getattr(site, key.lower()))
+                    if hasattr(structure[0], k.lower()):
+                        m = dict([(site.specie.symbol, getattr(site, k.lower()))
                                   for site in structure])
-                        incar[key] = [m[sym] for sym in poscar.site_symbols]
-                    elif most_electroneg in setting.keys():
-                        incar[key] = [setting[most_electroneg].get(sym, 0)
+                        incar[k] = [m[sym] for sym in poscar.site_symbols]
+                    elif most_electroneg in v.keys():
+                        incar[k] = [v[most_electroneg].get(sym, 0)
                                       for sym in poscar.site_symbols]
                     else:
-                        incar[key] = [0] * len(poscar.site_symbols)
-            elif key.startswith("EDIFF"):
-                if "EDIFF" not in self.incar_settings and key == "EDIFF_PER_ATOM":
-                    incar["EDIFF"] = float(setting) * structure.num_sites
+                        incar[k] = [0] * len(poscar.site_symbols)
+            elif k.startswith("EDIFF"):
+                if "EDIFF" not in settings and k == "EDIFF_PER_ATOM":
+                    incar["EDIFF"] = float(v) * structure.num_sites
                 else:
-                    incar["EDIFF"] = float(self.incar_settings["EDIFF"])
+                    incar["EDIFF"] = float(settings["EDIFF"])
             else:
-                incar[key] = setting
+                incar[k] = v
 
         has_u = hubbard_u and sum(incar['LDAUU']) > 0
         if has_u:
             # modify LMAXMIX if LSDA+U and you have d or f electrons
             # note that if the user explicitly sets LMAXMIX in settings it will
             # override this logic.
-            if 'LMAXMIX' not in self.incar_settings.keys():
+            if 'LMAXMIX' not in settings.keys():
                 # contains f-electrons
                 if any([el.Z > 56 for el in structure.composition]):
                     incar['LMAXMIX'] = 6
@@ -328,22 +321,24 @@ class DictSet(VaspInputSet):
             Uses a simple approach scaling the number of divisions along each
             reciprocal lattice vector proportional to its length.
         """
-        # If grid_density is in the kpoints_settings use Kpoints.automatic_density
-        if self.kpoints_settings.get('grid_density'):
+        settings = self.config_dict["KPOINTS"]
+        # If grid_density is in the kpoints_settings use
+        # Kpoints.automatic_density
+        if settings.get('grid_density'):
             return Kpoints.automatic_density(
-                self.structure, int(self.kpoints_settings['grid_density']),
+                self.structure, int(settings['grid_density']),
                 self.force_gamma)
 
-        # If reciprocal_density is in the kpoints_settings use Kpoints.automatic_density_by_vol
-        elif self.kpoints_settings.get('reciprocal_density'):
+        # If reciprocal_density is in the kpoints_settings use
+        # Kpoints.automatic_density_by_vol
+        elif settings.get('reciprocal_density'):
             return Kpoints.automatic_density_by_vol(
-                self.structure, int(self.kpoints_settings[
-                                        'reciprocal_density']),
+                self.structure, int(settings['reciprocal_density']),
                 self.force_gamma)
 
         # If length is in the kpoints_settings use Kpoints.automatic
-        elif self.kpoints_settings.get('length'):
-            return Kpoints.automatic(self.kpoints_settings['length'])
+        elif settings.get('length'):
+            return Kpoints.automatic(settings['length'])
 
         # Raise error. Unsure of which kpoint generation to use
         else:
@@ -357,18 +352,7 @@ class DictSet(VaspInputSet):
         return self.name
 
     def __repr__(self):
-        output = [self.name, ""]
-        section_names = ['INCAR settings', 'KPOINTS settings',
-                         'POTCAR settings']
-        count = 0
-        for d in [self.incar_settings, self.kpoints_settings,
-                  self.potcar_settings]:
-            output.append(section_names[count])
-            for k, v in d.items():
-                output.append("%s = %s" % (k, str(v)))
-            output.append("")
-            count += 1
-        return "\n".join(output)
+        return self.name
 
     def write_input(self, output_dir,
                     make_dir_if_not_present=True, include_cif=False):
@@ -443,7 +427,7 @@ class MPHSERelaxSet(ConfigFileSet):
     """
 
     def __init__(self, structure, **kwargs):
-        super(MPRelaxSet, self).__init__(
+        super(MPHSERelaxSet, self).__init__(
             structure,
             os.path.join(MODULE_DIR, "MPHSERelaxSet.yaml"), **kwargs)
 
@@ -451,8 +435,7 @@ class MPHSERelaxSet(ConfigFileSet):
 class MPStaticSet(MPRelaxSet):
 
     def __init__(self, structure, prev_incar=None, prev_kpoints=None,
-                 lepsilon=False, reciprocal_density=100, files_to_transfer=None,
-                 **kwargs):
+                 lepsilon=False, reciprocal_density=100, **kwargs):
         """
         Run a static calculation.
 
@@ -464,7 +447,7 @@ class MPStaticSet(MPRelaxSet):
             reciprocal_density (int): density of k-mesh by reciprocal
                 volume (defaults to 100)
             files_to_transfer (dict): A dictionary of {filename: filepath}.
-            \*\*kwargs: kwargs supported by MPVaspInputSet.
+            \*\*kwargs: kwargs supported by MPRelaxSet.
         """
         super(MPStaticSet, self).__init__(structure, **kwargs)
         self.prev_incar = prev_incar
@@ -473,7 +456,6 @@ class MPStaticSet(MPRelaxSet):
         self.structure = structure
         self.kwargs = kwargs
         self.lepsilon = lepsilon
-        self.files_to_transfer = files_to_transfer or {}
 
     @property
     def incar(self):
@@ -522,9 +504,6 @@ class MPStaticSet(MPRelaxSet):
 
     @property
     def kpoints(self):
-        if self.kpoints_settings.get("grid_density"):
-            self.kpoints_settings["grid_density"]
-        self.kpoints_settings["reciprocal_density"] = self.reciprocal_density
         kpoints = super(MPStaticSet, self).kpoints
 
         # Prefer to use k-point scheme from previous run
@@ -586,11 +565,11 @@ class MPStaticSet(MPRelaxSet):
             reciprocal_density=reciprocal_density, **kwargs)
 
 
-class MPHSEBSSet(DictSet):
+class MPHSEBSSet(MPHSERelaxSet):
 
     def __init__(self, structure, user_incar_settings=None, added_kpoints=None,
                  mode="Uniform", reciprocal_density=None,
-                 kpoints_line_density=20, files_to_transfer=None, **kwargs):
+                 kpoints_line_density=20, **kwargs):
         """
         Implementation of a VaspInputSet for HSE band structure computations.
         Remember that HSE band structures must be self-consistent in VASP. A
@@ -618,21 +597,16 @@ class MPHSEBSSet(DictSet):
             **kwargs (dict): Any other parameters to pass into DictVaspInputSet
 
         """
-
-        d = loadfn(os.path.join(MODULE_DIR, "MPHSEVaspInputSet.yaml"))
-        super(MPHSEBSSet, self).__init__(structure, "MPHSE", d,
-                                               **kwargs)
+        super(MPHSEBSSet, self).__init__(structure, **kwargs)
         self.structure = structure
         self.user_incar_settings = user_incar_settings or {}
-        self.incar_settings.update(
+        self.config_dict["INCAR"].update(
             {"NSW": 0, "ISMEAR": 0, "SIGMA": 0.05, "ISYM": 0, "LCHARG": False})
-        self.incar_settings.update(self.user_incar_settings)
         self.added_kpoints = added_kpoints if added_kpoints is not None else []
         self.mode = mode
         self.reciprocal_density = reciprocal_density or \
                                   self.kpoints_settings['reciprocal_density']
         self.kpoints_line_density = kpoints_line_density
-        self.files_to_transfer = files_to_transfer or {}
 
     @property
     def kpoints(self):
@@ -675,14 +649,6 @@ class MPHSEBSSet(DictSet):
                        style=Kpoints.supported_modes.Reciprocal,
                        num_kpts=len(kpts), kpts=kpts, kpts_weights=weights,
                        labels=all_labels)
-
-    def write_input(self, output_dir,
-                    make_dir_if_not_present=True, include_cif=False):
-        super(MPHSEBSSet, self).write_input(output_dir,
-            make_dir_if_not_present=make_dir_if_not_present,
-            include_cif=include_cif)
-        for k, v in self.files_to_transfer.items():
-            shutil.copy(v, os.path.join(output_dir, k))
 
     @classmethod
     def from_prev_calc(cls, prev_calc_dir, mode="Uniform",
@@ -732,8 +698,7 @@ class MPNonSCFSet(MPRelaxSet):
 
     def __init__(self, structure, prev_incar=None,
                  mode="line", nedos=601, reciprocal_density=100, sym_prec=0.1,
-                 kpoints_line_density=20, optics=False,
-                 files_to_transfer=None, **kwargs):
+                 kpoints_line_density=20, optics=False, **kwargs):
         """
         Init a MPNonSCFSet. Typically, you would use the classmethod
         from_prev_calc to initialize from a previous SCF run.
@@ -754,7 +719,6 @@ class MPNonSCFSet(MPRelaxSet):
         super(MPNonSCFSet, self).__init__(structure, **kwargs)
         self.prev_incar = prev_incar
         self.kwargs = kwargs
-        self.files_to_transfer = files_to_transfer or {}
         self.nedos = nedos
         self.reciprocal_density = reciprocal_density
         self.sym_prec = sym_prec

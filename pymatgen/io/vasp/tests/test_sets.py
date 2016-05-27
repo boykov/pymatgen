@@ -203,16 +203,16 @@ class MITMPRelaxSetTest(unittest.TestCase):
 
         d = mitset.as_dict()
         v = dec.process_decoded(d)
-        self.assertEqual(v.incar_settings["LDAUU"]["O"]["Fe"], 4)
+        self.assertEqual(v.config_dict["INCAR"]["LDAUU"]["O"]["Fe"], 4)
 
         d = mpset.as_dict()
         v = dec.process_decoded(d)
-        self.assertEqual(v.incar_settings["LDAUU"]["O"]["Fe"], 5.3)
+        self.assertEqual(v.config_dict["INCAR"]["LDAUU"]["O"]["Fe"], 5.3)
 
         d = mpuserset.as_dict()
         v = dec.process_decoded(d)
         #self.assertEqual(type(v), MPVaspInputSet)
-        self.assertEqual(v.incar_settings["MAGMOM"],
+        self.assertEqual(v.user_incar_settings["MAGMOM"],
                          {"Fe": 10, "S": -5, "Mn3+": 100})
 
     def test_hubbard_off_and_ediff_override(self):
