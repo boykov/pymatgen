@@ -597,6 +597,17 @@ class MVLSlabSetTest(PymatgenTest):
         self.assertEqual(kpoints_slab[2], 1)
 
 
+class MVLElasticSetTest(PymatgenTest):
+
+    def test_incar(self):
+        mvlparam = MVLElasticSet(self.get_structure("Graphite"))
+        incar = mvlparam.incar
+        self.assertEqual(incar["IBRION"], 6)
+        self.assertEqual(incar["NFREE"], 2)
+        self.assertEqual(incar["POTIM"], 0.015)
+        self.assertNotIn("NPAR", incar)
+
+
 class MPHSEBSTest(PymatgenTest):
 
     def setUp(self):
@@ -618,7 +629,7 @@ class MPHSEBSTest(PymatgenTest):
 class FuncTest(PymatgenTest):
 
     def test_batch_write_input(self):
-        with ScratchDir(".") as d:
+        with ScratchDir("."):
             structures = [PymatgenTest.get_structure("Li2O"),
                           PymatgenTest.get_structure("LiFePO4")]
             batch_write_input(structures)
