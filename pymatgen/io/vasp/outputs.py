@@ -906,6 +906,7 @@ class Vasprun(MSONable):
                             peigen[i][spin].append({})
                 for (spin, kpoint_index, band_index, ion_index, orbital), \
                         value in self.projected_eigenvalues.items():
+                    # print(kpoint_index, spin, band_index)
                     beigen = peigen[kpoint_index][str(spin)][band_index]
                     if orbital not in beigen:
                         beigen[orbital] = [0.0] * nsites
@@ -1045,7 +1046,7 @@ class Vasprun(MSONable):
         for s in elem.find("total").find("array").find("set").findall("set"):
             data = np.array(_parse_varray(s))
             energies = data[:, 0]
-            spin = Spin.up if s.attrib["comment"] == "spin 1" else Spin.down
+            spin = Spin.up if (s.attrib["comment"] == "spin 1" or s.attrib["comment"] == "spin 2" or s.attrib["comment"] == "spin 3" or s.attrib["comment"] == "spin 4") else Spin.down
             tdensities[spin] = data[:, 1]
             idensities[spin] = data[:, 2]
 
@@ -1059,7 +1060,7 @@ class Vasprun(MSONable):
                 pdos = defaultdict(dict)
 
                 for ss in s.findall("set"):
-                    spin = Spin.up if ss.attrib["comment"] == "spin 1" else \
+                    spin = Spin.up if (ss.attrib["comment"] == "spin 1" or ss.attrib["comment"] == "spin 2" or ss.attrib["comment"] == "spin 3" or ss.attrib["comment"] == "spin 4") else \
                         Spin.down
                     data = np.array(_parse_varray(ss))
                     nrow, ncol = data.shape
@@ -1077,7 +1078,7 @@ class Vasprun(MSONable):
     def _parse_eigen(self, elem):
         eigenvalues = {}
         for s in elem.find("array").find("set").findall("set"):
-            spin = Spin.up if s.attrib["comment"] == "spin 1" else \
+            spin = Spin.up if (s.attrib["comment"] == "spin 1" or s.attrib["comment"] == "spin 2" or s.attrib["comment"] == "spin 3" or s.attrib["comment"] == "spin 4") else \
                 Spin.down
             for i, ss in enumerate(s.findall("set")):
                 eigenvalues[(spin, i)] = _parse_varray(ss)
@@ -1088,7 +1089,7 @@ class Vasprun(MSONable):
         root = elem.find("array").find("set")
         proj_eigen = {}
         for s in root.findall("set"):
-            spin = Spin.up if s.attrib["comment"] == "spin1" else \
+            spin = Spin.up if (s.attrib["comment"] == "spin1" or s.attrib["comment"] == "spin2" or s.attrib["comment"] == "spin3" or s.attrib["comment"] == "spin4") else \
                 Spin.down
             for kpt, ss in enumerate(s.findall("set")):
                 for band, sss in enumerate(ss.findall("set")):
